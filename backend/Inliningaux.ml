@@ -83,13 +83,26 @@ let static_called_once id io =
   else
     false
 
-(* To be considered: heuristics based on size of function? *)
+let small_leaf_function (function_definition: coq_function) =
+  let limit = 16 in
+  Camlcoq.Z.eq function_definition.fn_stacksize Camlcoq.Z.zero &&
+  PTree.fold
+    (fun cost _ instruction ->
+      let amount =
+        match instruction with
+        | Inop _ | Iop (Omove, _, _, _) -> 0
+        | Iop _ | Ireturn _ -> 1
+        | Iload _ | Istore _ | Icond _ -> 2
+        | Ibuiltin ((EF_annot _ | EF_debug _), _, _, _) -> 0
+        | Icall _ | Itailcall _ | Ibuiltin _ | Ijumptable _ -> limit + 1 in
+      min (limit + 1) (cost + amount))
+    function_definition.fn_code 0 <= limit
 
 let should_inline (io: inlining_info) (id: ident) (f: coq_function) =
   if !Clflags.option_finline then begin
     match C2C.atom_inline id with
     | C2C.Inline -> true
     | C2C.Noinline -> false
-    | C2C.No_specifier -> static_called_once id io
+    | C2C.No_specifier -> static_called_once id io || small_leaf_function f
   end else
     false
