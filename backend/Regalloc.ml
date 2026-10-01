@@ -490,6 +490,10 @@ let dead_code_elimination f liveness =
 let spill_costs f =
 
   let costs = ref PTree.empty in
+  let loop_depths = Loopinfo.depths
+    (PTree.map (fun _ block -> successors_block block) f.fn_code)
+    f.fn_entrypoint in
+  let block_weight = ref 1 in
 
   let get_stats r =
     match PTree.get r !costs with
@@ -500,6 +504,7 @@ let spill_costs f =
         st in
 
   let charge amount uses v =
+    let amount = if amount = max_int then max_int else amount * !block_weight in
     match v with
     | L l -> ()
     | V(r, ty) ->
@@ -582,10 +587,13 @@ let spill_costs f =
     | Xreturn optarg ->
         () in
 
-  let charge_block blk = List.iter charge_instr blk in
+  let charge_block node blk =
+    block_weight := Loopinfo.weight
+      (match PTree.get node loop_depths with Some depth -> depth | None -> 0);
+    List.iter charge_instr blk in
 
-  PTree.fold1
-    (fun () blk -> charge_block blk)
+  PTree.fold
+    (fun () node blk -> charge_block node blk)
     f.fn_code ();
   if !option_dalloctrace then begin
     fprintf !pp "------------------ Unspillable variables --------------\n\n";

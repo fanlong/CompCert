@@ -259,7 +259,8 @@ extraction/STAMP: $(FILES:.v=.vo) extraction/extraction.v $(ARCH)/extractionMach
          fi
 	touch extraction/STAMP
 
-.depend.extr: extraction/STAMP tools/modorder driver/Version.ml
+.depend.extr: extraction/STAMP tools/modorder driver/Version.ml \
+              backend/Loopinfo.ml backend/Regalloc.ml backend/Linearizeaux.ml
 	$(MAKE) -f Makefile.extr depend
 
 ccomp: .depend.extr compcert.ini driver/Version.ml FORCE
