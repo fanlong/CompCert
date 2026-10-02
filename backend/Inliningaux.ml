@@ -84,7 +84,7 @@ let static_called_once id io =
     false
 
 let small_leaf_function (function_definition: coq_function) =
-  let limit = 16 in
+  let limit = 32 in
   Camlcoq.Z.eq function_definition.fn_stacksize Camlcoq.Z.zero &&
   PTree.fold
     (fun cost _ instruction ->
@@ -98,11 +98,32 @@ let small_leaf_function (function_definition: coq_function) =
       min (limit + 1) (cost + amount))
     function_definition.fn_code 0 <= limit
 
+let small_wrapper_function identifier (function_definition: coq_function) =
+  let limit = 24 in
+  let calls = ref 0 in
+  Camlcoq.Z.eq function_definition.fn_stacksize Camlcoq.Z.zero &&
+  PTree.fold
+    (fun cost _ instruction ->
+      let amount =
+        match instruction with
+        | Inop _ | Iop (Omove, _, _, _) -> 0
+        | Iop _ | Ireturn _ -> 1
+        | Iload _ | Istore _ | Icond _ -> 2
+        | Ibuiltin ((EF_annot _ | EF_debug _), _, _, _) -> 0
+        | Icall (_, Coq_inr callee, _, _, _)
+        | Itailcall (_, Coq_inr callee, _) when callee <> identifier ->
+            incr calls;
+            8
+        | Icall _ | Itailcall _ | Ibuiltin _ | Ijumptable _ -> limit + 1 in
+      min (limit + 1) (cost + amount))
+    function_definition.fn_code 0 <= limit && !calls = 1
+
 let should_inline (io: inlining_info) (id: ident) (f: coq_function) =
   if !Clflags.option_finline then begin
     match C2C.atom_inline id with
     | C2C.Inline -> true
     | C2C.Noinline -> false
-    | C2C.No_specifier -> static_called_once id io || small_leaf_function f
+    | C2C.No_specifier ->
+        static_called_once id io || small_leaf_function f || small_wrapper_function id f
   end else
     false
