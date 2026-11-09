@@ -67,7 +67,7 @@ let fun_inline_analysis id io fn =
 
 (* Gather information about the program used for inlining heuristic *)
 let inlining_analysis (p: program) =
-  if !Clflags.option_finline && !Clflags.option_finline_functions_called_once then
+  if !Clflags.option_finline then
     List.fold_left (fun io idg ->
         match idg with
         | fid, Gfun (Internal f) -> fun_inline_analysis fid io f
@@ -83,13 +83,25 @@ let static_called_once id io =
   else
     false
 
-(* To be considered: heuristics based on size of function? *)
+(* Tiny static wrappers used by a bounded number of callers generally benefit
+   from eliminating call/return and argument moves without meaningful code
+   growth.  The inlining correctness proof is independent of this heuristic. *)
+
+let repeated_inline_call_limit = 8
+let repeated_inline_node_limit = 24
+
+let static_small_repeated id io f =
+  let calls = call_count id io in
+  let nodes = PTree.fold (fun count _ _ -> count + 1) f.fn_code 0 in
+  C2C.atom_is_static id && calls > 1 && calls <= repeated_inline_call_limit
+  && nodes <= repeated_inline_node_limit && not (address_taken id io)
 
 let should_inline (io: inlining_info) (id: ident) (f: coq_function) =
   if !Clflags.option_finline then begin
     match C2C.atom_inline id with
     | C2C.Inline -> true
     | C2C.Noinline -> false
-    | C2C.No_specifier -> static_called_once id io
+    | C2C.No_specifier ->
+        static_called_once id io || static_small_repeated id io f
   end else
     false
