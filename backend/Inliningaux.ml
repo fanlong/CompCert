@@ -88,7 +88,7 @@ let static_called_once id io =
    growth.  The inlining correctness proof is independent of this heuristic. *)
 
 let repeated_inline_call_limit = 8
-let repeated_inline_node_limit = 24
+let repeated_inline_node_limit = 32
 
 let static_small_repeated id io f =
   let calls = call_count id io in
